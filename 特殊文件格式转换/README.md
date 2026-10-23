@@ -2,7 +2,7 @@
 
 ## 项目用途与来源
 
-本项目从只读来源 `D:\特殊文件格式转换\检验报告模板转换` 整理而来。它把特殊布局的原始检验数据转换为内置 `template.xlsx`（LJG-FH56-1 格式）检验报告：数据取自源工作簿，模板负责布局和样式。原始实现完整保留在 `legacy/original_src/检验报告模板转换`；新层不改写转换、判定、命名和 COM/回退逻辑。
+本项目从只读来源 `D:\特殊文件格式转换\检验报告模板转换` 整理而来。它把特殊布局的原始检验数据转换为内置 `template.xlsx`（LJG-FH56-1 格式）检验报告：数据取自源工作簿，模板负责布局和样式。项目根目录的 `converter.py`、`converter_gui.py`、`template.xlsx`、`VERSION` 是可直接维护和运行的原始程序及资源；`legacy/original_src/检验报告模板转换` 保留迁移副本。
 
 ## 功能清单
 
@@ -13,7 +13,7 @@
 
 ## 目录结构
 
-`legacy/original_src/检验报告模板转换` 保存原核心、GUI、模板、打包配置和输入样例；根目录 `converter.py`、`converter_gui.py` 保持旧调用路径；`backend/app` 提供服务、领域契约、适配器、配置和 API；`frontend/src/api` 是 Web 前端请求占位；`docs`、`config`、`tests`、`output`、`logs` 用于交付和运行。
+根目录的 `converter.py`、`converter_gui.py`、`template.xlsx` 是原始维护文件；`legacy/original_src/检验报告模板转换` 为迁移副本并保留原输入样例；`backend/app` 提供服务、领域契约、适配器、配置和 API，适配器从项目根加载原始代码；`frontend/src/api` 是 Web 前端请求占位；`docs`、`config`、`tests`、`output`、`logs` 用于交付和运行。
 
 ## 环境、安装与配置
 
@@ -66,6 +66,6 @@
 
 | 旧文件/函数 | 新位置/接口 |
 | --- | --- |
-| `converter.py` / `convert_file` | `legacy/original_src/检验报告模板转换/converter.py`；`backend/app/services/special_format_service.py` |
-| `converter_gui.py` | 根目录同名 GUI 兼容入口 |
-| `template.xlsx` | `legacy/original_src/检验报告模板转换/template.xlsx` |
+| `converter.py` / `convert_file` | 根目录原程序；`backend/app/services/special_format_service.py` 从根目录加载 |
+| `converter_gui.py` | 根目录原 GUI 入口 |
+| `template.xlsx` | 根目录原模板，legacy 中保留副本 |

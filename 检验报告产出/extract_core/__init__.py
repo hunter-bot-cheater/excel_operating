@@ -1,7 +1,9 @@
-"""旧 `extract_core` 导入路径兼容入口，真实实现位于 legacy/original_src。"""
-from pathlib import Path
+# -*- coding: utf-8 -*-
+"""提取文件数据工具 —— 核心逻辑层（前后端分离，供 GUI / 网页端共用）。
 
-_legacy_package = Path(__file__).resolve().parents[1] / "legacy" / "original_src" / "extract_core"
-__path__ = [str(_legacy_package)]
-__file__ = str(_legacy_package / "__init__.py")
-exec(compile(__file__ and Path(__file__).read_text(encoding="utf-8"), __file__, "exec"), globals(), globals())
+对外统一入口见 api.py：
+    from extract_core.api import run_batch, process_report
+"""
+from .api import run_batch, process_report
+
+__all__ = ["run_batch", "process_report"]

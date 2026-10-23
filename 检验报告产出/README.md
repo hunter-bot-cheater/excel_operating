@@ -2,7 +2,7 @@
 
 ## 项目用途与来源
 
-本项目从只读备份 `D:\提取文件数据` 整理而来：依据 BOM 和检验大报告抽取指定件数的测量数据，生成独立检验报告，并按旧规则回写 BOM 套数。原 `extract_core`、GUI、规格和测试源码完整保留于 `legacy/original_src`；新层不重写匹配、拆分、写回或命名算法。
+本项目从只读备份 `D:\提取文件数据` 整理而来：依据 BOM 和检验大报告抽取指定件数的测量数据，生成独立检验报告，并按旧规则回写 BOM 套数。项目根目录的 `extract_core` 和 `extract_gui.py` 是可直接维护和运行的原始程序；`legacy/original_src` 保留迁移副本。新层不重写匹配、拆分、写回或命名算法。
 
 ## 功能清单
 
@@ -13,7 +13,7 @@
 
 ## 目录结构
 
-`legacy/original_src/extract_core` 是原核心包；根目录 `extract_core` 保留旧导入路径；`backend/app/services` 只适配 `run_batch`；`domain`、`adapters`、`api/v1`、`frontend/src/api`、`config`、`docs`、`tests`、`output`、`logs` 以职责分层。
+根目录 `extract_core`、`extract_gui.py` 是原始维护源码；`legacy/original_src/extract_core` 为迁移副本；`backend/app/services` 只适配 `run_batch`，适配器从项目根加载原包；`domain`、`api/v1`、`frontend/src/api`、`config`、`docs`、`tests`、`output`、`logs` 以职责分层。
 
 ## 环境、安装与配置
 
@@ -65,6 +65,6 @@
 
 | 旧文件/函数 | 新位置/接口 |
 | --- | --- |
-| `extract_core/api.py` / `run_batch` | `legacy/original_src/extract_core/api.py`；`backend/app/services/report_generation_service.py` |
-| `extract_gui.py` | 根目录同名 GUI 兼容入口 |
-| `extract_core` 包 | 根目录同名兼容包，保持旧 import 方式 |
+| `extract_core/api.py` / `run_batch` | 根目录原始包；`backend/app/services/report_generation_service.py` 从根目录加载 |
+| `extract_gui.py` | 根目录原 GUI 入口 |
+| `extract_core` 包 | 根目录原包，保持旧 import 方式 |

@@ -2,7 +2,7 @@
 
 ## 项目用途与来源
 
-本项目从只读备份 `D:\文件转换不改格式` 整理而来，用于审核 `.xls/.xlsx/.xlsm` 检验报告，筛选不合格项并输出规范化后的工作簿。原算法完整复制在 `legacy/original_src`；新层只提供兼容入口、配置和 Web 接口，**不改变**原有判定、命名、编码、默认参数或 Excel 格式处理规则。
+本项目从只读备份 `D:\文件转换不改格式` 整理而来，用于审核 `.xls/.xlsx/.xlsm` 检验报告，筛选不合格项并输出规范化后的工作簿。项目根目录的 `audit_fail.py`、`api.py`、`audit_fail_gui.py` 是可直接维护和运行的原始程序；`legacy/original_src` 保留迁移副本。**业务判定、命名、编码、默认参数和 Excel 格式规则均未改写。**
 
 ## 功能清单
 
@@ -12,7 +12,7 @@
 
 ## 目录结构
 
-`legacy/original_src` 是原始源码复制件；`backend/app/services` 是用例包装；`domain` 是请求契约；`adapters` 是旧代码加载器；`api/v1` 是 FastAPI 路由；`frontend/src/api` 是前端请求占位；`config`、`docs`、`tests`、`output`、`logs` 分别存放示例配置、文档、验证、运行产物和日志。
+根目录原始程序为维护源；`legacy/original_src` 是迁移时副本；`backend/app/services` 是用例包装，`adapters` 从项目根加载原始代码；`domain` 是请求契约；`api/v1` 是 FastAPI 路由；`frontend/src/api` 是前端请求占位；`config`、`docs`、`tests`、`output`、`logs` 分别存放示例配置、文档、验证、运行产物和日志。
 
 ## 环境、安装与配置
 
@@ -64,6 +64,6 @@
 
 | 旧文件/函数 | 新位置/接口 |
 | --- | --- |
-| `audit_fail.py` / `audit_file` | `legacy/original_src/audit_fail.py`；`backend/app/services/screening_service.py` |
-| `audit_fail_gui.py` | 根目录同名兼容入口 |
-| `api.py` | `/api/v1/nonconforming/*`；旧 API 原件仍在 legacy |
+| `audit_fail.py` / `audit_file` | 根目录原程序；`backend/app/services/screening_service.py` 从根目录加载 |
+| `audit_fail_gui.py` | 根目录原 GUI 入口 |
+| `api.py` | 根目录原 API 入口；新 REST API 为 `/api/v1/nonconforming/*` |

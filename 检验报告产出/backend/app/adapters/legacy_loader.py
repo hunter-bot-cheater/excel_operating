@@ -4,7 +4,7 @@ import importlib
 import sys
 from pathlib import Path
 
-ORIGINAL_SRC = Path(__file__).resolve().parents[3] / "legacy" / "original_src"
+ORIGINAL_SRC = Path(__file__).resolve().parents[3]
 
 
 def import_original(module_name: str):

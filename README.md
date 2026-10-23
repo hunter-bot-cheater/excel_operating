@@ -1,6 +1,6 @@
 # 文件操作程序工程总览
 
-本目录将四个原始只读备份工程标准化为彼此独立的子项目。原始目录未被移动、重命名、删除或修改；可运行源码的复制件均在各项目 `legacy/original_src`。
+本目录包含四个彼此独立的项目。每个项目根目录直接放置对应原始程序的可运行源码，适合分别维护；`legacy/original_src` 保留迁移时的原始副本。原始备份目录未被移动、重命名、删除或修改。
 
 | 原始备份 | 新项目 | 核心旧入口 | 新 API |
 | --- | --- | --- | --- |
@@ -12,12 +12,12 @@
 ## 统一规范
 
 - 后端均为 FastAPI 结构，统一 `/api/v1` 前缀、JSON 包络 `code/message/data/trace_id`、multipart 上传、任务提交/查询/下载三段式接口。
-- 三个服务默认单 worker，以兼容 Windows Excel COM；前端目录只提供 baseURL API 封装，不锁定具体框架。
+- 四个服务默认单 worker，以兼容 Windows Excel COM；前端目录只提供 baseURL API 封装，不锁定具体框架。
 - 配置位于每项目 `config/config.example.yaml` 和 `.env.example`；不含账号、密码或密钥。所有新文本均为 UTF-8。
 
 ## 启动
 
-分别进入子项目执行 `python -m pip install -r requirements.txt`，然后运行其 `python scripts/run_api.py`（默认端口依次为 8000、8001、8002、8003），或运行同名 GUI 兼容入口。详细的输入、输出、错误和验收要求以各项目 README 为准。
+分别进入子项目执行 `python -m pip install -r requirements.txt`，然后运行其 `python scripts/run_api.py`（默认端口依次为 8000、8001、8002、8003），或运行根目录中的原始 GUI 入口。详细的输入、输出、错误和验收要求以各项目 README 为准。
 
 ## 回滚
 
@@ -27,7 +27,7 @@
 
 ## GitHub 版本控制
 
-本目录是 Git 仓库根目录，远程为 `https://github.com/hunter-bot-cheater/excel_operating.git`，四个项目分别位于本目录的四个子文件夹。日常更新可执行：
+本目录是 Git 仓库根目录，远程为 `git@github.com:hunter-bot-cheater/excel_operating.git`，四个项目分别位于本目录的四个子文件夹。日常更新可执行：
 
 ```powershell
 git pull --rebase origin main

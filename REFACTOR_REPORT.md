@@ -4,7 +4,7 @@
 
 ## 完成结论
 
-已在 `D:\文件操作程序` 创建四个相互独立的标准化子项目，并将可运行源码、模板、说明和必要验证资产复制到各自的 `legacy/original_src/`。本次没有对以下原始备份目录执行写入、移动、重命名或删除：
+已在 `D:\文件操作程序` 创建四个相互独立的标准化子项目，并将可运行源码、模板、说明和必要验证资产复制到项目。每个项目根目录现直接包含原始主程序入口，`legacy/original_src/` 保留迁移副本。本次没有对以下原始备份目录执行写入、移动、重命名或删除：
 
 - `D:\文件转换不改格式`
 - `D:\提取文件数据`
@@ -31,7 +31,7 @@
 每个新项目均包含：
 
 - `legacy/original_src/`：未重写的原始逻辑复制件；
-- 根目录旧调用兼容入口（`audit_fail.py`、`api.py`、`audit_fail_gui.py`；`extract_core`、`extract_gui.py`；`converter.py`、`converter_gui.py`）；
+- 根目录原始维护入口（`audit_fail.py`、`api.py`、`audit_fail_gui.py`；`extract_core`、`extract_gui.py`；`converter.py`、`converter_gui.py`）；
 - `backend/app/{services,domain,adapters,schemas,core,api/v1}`：只做调用适配、配置、任务和响应，不改业务算法；
 - `frontend/src/api/client.js`：环境变量 baseURL 的前端分离占位；
 - `config/`、`.env.example`、`requirements.txt`、`pyproject.toml`、`.gitignore`、`docs/`、`tests/`、`output/`、`logs/`。
@@ -50,15 +50,15 @@
 
 1. 进入对应项目，执行 `python -m pip install -r requirements.txt`。
 2. 旧桌面方式：分别运行 `python audit_fail_gui.py`、`python extract_gui.py`、`python converter_gui.py`。
-3. 旧代码调用：使用根目录兼容入口的 `audit_fail.audit_file/audit_paths`、`extract_core.api.run_batch`、`converter.convert_file`；签名和默认值由 legacy 原实现保持。
+3. 原代码调用：使用项目根目录的 `audit_fail.audit_file/audit_paths`、`extract_core.api.run_batch`、`converter.convert_file`；签名和默认值保持原样，API 服务也从项目根加载这些模块。
 4. 新 API：分别运行 `python scripts/run_api.py`，端口为 8000、8001、8002；或使用各项目 README 中的 Uvicorn 命令。
 
-旧不合格筛选 API 也保留根目录 `api.py` 与 `start_api.bat` 兼容入口，真实旧 API 文件保留在 `legacy/original_src/api.py`。
+不合格筛选的旧 API 保留根目录 `api.py` 与 `start_api.bat` 原入口；迁移副本位于 `legacy/original_src/api.py`。
 
 ## 验证结果
 
 - 新增 Python 包装层已执行 `py_compile`：通过。
-- 三项目兼容入口测试已执行：`6 passed`。
+- 初次标准化层验证曾执行三项目兼容测试；本次根目录源码布局调整后的四项目回归测试为 `8 passed`（Python 3.13）。
 - 不合格筛选服务已用复制的 `不合格_test_93022608_injected.xlsx` 执行冒烟：返回 `total=1`、`fail=1`，并在目标项目 `output/smoke/` 生成 `不合格_test_93022608_injected.xlsx`。输入复制件未被修改。
 - FastAPI 运行时导入尚未执行：当前 Python 环境缺少 `fastapi`，并非源码错误；依赖已写入三个 `requirements.txt`。完成安装后应按 README 运行健康检查和上传接口。
 
@@ -75,10 +75,18 @@ Excel/xlsx 保存后 ZIP 内部元数据可能不同，因此对格式转换和 
 ## 未决问题与后续建议
 
 1. 确认业务方认可的金样输入/输出、允许的 Excel 版本，以及“上云”平台字段契约后，补充到 `tests/fixtures` 并固化回归断言。
-2. 当前任务状态存于进程内；若部署为网站，应在服务层外接数据库/Redis 队列、对象存储和认证网关，但不得改写 `legacy/original_src`。
+2. 当前任务状态存于进程内；若部署为网站，应在服务层外接数据库/Redis 队列、对象存储和认证网关，保持项目根原程序签名与结果兼容。
 3. 检验报告产出的旧逻辑会回写 BOM 并推进来源报告的已用量后缀。API 已通过上传副本隔离；直接使用旧函数前仍需由用户确认输入文件可被改写。
 4. Windows Excel COM 场景应保持单 worker，并由实际安装 Excel 的 Windows worker 执行。生产发布前先安装 requirements，再跑 `/api/v1/health`、上传冒烟和金样人工验收。
 
 ## 2026-10-05 增量同步
 
 三个既有项目中已变更的 legacy 源码已按来源覆盖同步，覆盖前副本保存于各项目 `legacy/snapshots/2026-10-05-pre-sync/`；上云数据模板没有源码差异。新增“特殊文件格式转换”项目，默认 API 端口为 8003。完整清单见 [SYNC_REPORT_2026-10-05.md](SYNC_REPORT_2026-10-05.md)。
+
+## GitHub 初始推送准备与根目录原程序布局（2026-10-23）
+
+- 为满足四个子文件夹独立维护，已将每个项目的原始入口代码放到项目根目录：不合格筛选的 `audit_fail.py/api.py/audit_fail_gui.py`；检验报告产出的 `extract_core/` 和 `extract_gui.py`；上云数据模板的 `converter.py/converter_gui.py/template_nda.xlsx`；特殊格式转换的 `converter.py/converter_gui.py/template.xlsx/VERSION`。
+- 这些文件从 `legacy/original_src` 的迁移副本复制而来，未改写原程序；`legacy/original_src` 仍保留独立副本。四个 API 适配器改为从项目根目录加载，确保根目录程序的维护变更同步用于 API。
+- 原始程序文件和模板的 SHA-256 与各自迁移副本逐一比对一致；四个项目现有兼容测试共 `8 passed`。初次用系统 Python 3.12 无 pytest；切换到已配置 pytest 的 Python 3.13 后通过。
+- Windows OpenSSH 位于 `C:\Windows\System32\OpenSSH\ssh.exe`；`ssh -T git@github.com` 已认证为 `hunter-bot-cheater`。HTTPS remote 的 push 曾触发不可用的用户名弹窗，后续应切换为 SSH remote 推送。
+- 推送范围为单仓库内四个项目子目录；仍遵从根 `.gitignore` 排除快照、真实测试工作簿、诊断脚本和构建产物。原始备份目录只读。

@@ -2,7 +2,7 @@
 
 ## 项目用途与来源
 
-本项目从只读备份 `D:\文件转换` 整理而来，将 `.xls/.xlsx/.csv` 检验报告转换为“上云数据”标准 `.xlsx` 模板。原转换实现、GUI、模板、历史版本和验证源码均复制在 `legacy/original_src`；新模块只是稳定的服务/API/兼容层，未改写原格式转换算法。
+本项目从只读备份 `D:\文件转换` 整理而来，将 `.xls/.xlsx/.csv` 检验报告转换为“上云数据”标准 `.xlsx` 模板。项目根目录的 `converter.py`、`converter_gui.py`、`template_nda.xlsx` 是可直接维护和运行的原始程序及模板；`legacy/original_src` 保留迁移副本。服务层未改写原格式转换算法。
 
 ## 功能清单
 
@@ -12,7 +12,7 @@
 
 ## 目录结构
 
-`legacy/original_src/converter.py` 是唯一核心算法；根目录 `converter.py` 保留旧 import；`backend/app/services` 仅委派原 `convert_file`；`domain`、`adapters`、`api/v1`、`frontend/src/api`、`config`、`docs`、`tests`、`output`、`logs` 是标准化层。
+根目录 `converter.py` 是核心维护源码，`converter_gui.py` 是原 GUI；模板同样放在根目录以保持相对路径兼容。`legacy/original_src` 是迁移副本；`backend/app/services` 委派根目录原 `convert_file`；`domain`、`adapters`、`api/v1`、`frontend/src/api`、`config`、`docs`、`tests`、`output`、`logs` 是标准化层。
 
 ## 环境、安装与配置
 
@@ -63,6 +63,6 @@
 
 | 旧文件/函数 | 新位置/接口 |
 | --- | --- |
-| `converter.py` / `convert_file` | `legacy/original_src/converter.py`；`backend/app/services/cloud_template_service.py` |
-| `converter_gui.py` | 根目录同名 GUI 兼容入口 |
-| `template_nda.xlsx` | `legacy/original_src/template_nda.xlsx` |
+| `converter.py` / `convert_file` | 根目录原程序；`backend/app/services/cloud_template_service.py` 从根目录加载 |
+| `converter_gui.py` | 根目录原 GUI 入口 |
+| `template_nda.xlsx` | 根目录原模板，`legacy/original_src/template_nda.xlsx` 为副本 |
