@@ -1,0 +1,61 @@
+# Python/runtime artifacts
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+**/.pytest_cache/
+**/.runtime/
+**/node_modules/
+
+# Generated results and logs
+**/output/**
+**/logs/**
+**/build/
+**/dist/
+**/test_out/
+
+# Local historical snapshots are retained on disk, not published as source.
+**/snapshots/
+**/legacy/snapshots/
+
+# Real or locally sourced workbook samples may contain customer/company data.
+**/legacy/original_src/test/fixtures/**
+**/legacy/original_src/test/realinput/**
+**/legacy/original_src/**/test_in/*.xls
+**/legacy/original_src/**/test_in/*.xlsx
+**/legacy/original_src/**/test_in/*.xlsm
+**/legacy/original_src/*_test_*.xlsx
+
+# Local build logs and diagnostics include machine-specific paths/data.
+**/legacy/original_src/build_log*.txt
+**/legacy/original_src/bench_tmp/
+**/legacy/original_src/*.spec
+**/legacy/original_src/**/*.spec
+**/legacy/original_src/verify_*.py
+**/legacy/original_src/_verify.py
+**/legacy/original_src/dump_source.py
+**/legacy/original_src/pvd_compare.py
+**/legacy/original_src/test_convert.py
+**/legacy/original_src/_dl.py
+**/legacy/original_src/_fix.py
+**/legacy/original_src/_run_tests.py
+**/legacy/original_src/test/diag*.py
+**/legacy/original_src/test/inspect*.py
+**/legacy/original_src/test/verify_concat.py
+**/legacy/original_src/test/profile*.py
+**/legacy/original_src/test/real_flow.py
+**/legacy/original_src/test/e2e_k5.py
+**/legacy/original_src/test/e2e_real.py
+**/legacy/original_src/test/k5_test.py
+**/legacy/original_src/test/probe_bom*.py
+**/legacy/original_src/test/probe_real.py
+**/legacy/original_src/test/_repro*.py
+**/legacy/original_src/test_api*.py
+**/legacy/original_src/validate_real.py
+
+# Test scratch folders
+**/legacy/original_src/test/_selftest*
+**/legacy/original_src/test/_gauge_tmp/

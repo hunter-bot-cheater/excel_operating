@@ -1,0 +1,6 @@
+{
+  "name": "cloud-data-template-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": { "dev": "echo Frontend placeholder: connect any SPA to src/api/client.js" }
+}

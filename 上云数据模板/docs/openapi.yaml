@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info: {title: 上云数据模板 API, version: 0.1.0}
+paths:
+  /api/v1/cloud-templates/convert:
+    post:
+      summary: 上传检验报告并生成上云数据模板
+      requestBody:
+        required: true
+        content: {multipart/form-data: {schema: {type: object, required: [file], properties: {file: {type: string, format: binary}, default_year: {type: string, nullable: true}}}}}
+      responses: {'200': {description: 已接收}, '422': {description: 参数错误}}
+  /api/v1/cloud-templates/tasks/{task_id}:
+    get:
+      parameters: [{name: task_id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: 任务状态}, '404': {description: 不存在}}
+  /api/v1/cloud-templates/tasks/{task_id}/downloads/{filename}:
+    get:
+      parameters: [{name: task_id, in: path, required: true, schema: {type: string}}, {name: filename, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: 文件流}}

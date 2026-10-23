@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审核不合格数据 · Web 版</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    background: #F5F7FA; color: #2C3E50; min-height: 100vh;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  .title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .title-row h1 { font-size: 22px; font-weight: 700; }
+  .badge {
+    background: #3498DB; color: #fff; font-size: 11px; font-weight: 700;
+    padding: 3px 12px; border-radius: 10px;
+  }
+  .card {
+    background: #fff; border: 1px solid #DCE3EA; border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .card h2::before { content: "▍"; color: #3498DB; }
+
+  /* 拖拽区 */
+  #drop {
+    border: 2px dashed #9AA7B5; border-radius: 12px; background: #fff;
+    padding: 36px 16px; text-align: center; color: #7F8C8D; font-size: 14px;
+    cursor: pointer; transition: all .15s;
+  }
+  #drop.hover { border-color: #3498DB; background: #EAF4FD; color: #2980B9; }
+  #drop strong { color: #2C3E50; }
+
+  #fileList { margin-top: 12px; }
+  .fitem {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    border-radius: 6px; font-size: 13px;
+  }
+  .fitem:nth-child(odd) { background: #F8FAFC; }
+  .fitem .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fitem .rm {
+    border: none; background: transparent; color: #E74C3C; cursor: pointer;
+    font-size: 15px; padding: 2px 6px; border-radius: 4px;
+  }
+  .fitem .rm:hover { background: #FDECEC; }
+
+  /* 按钮 */
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+  .btn {
+    border: none; border-radius: 6px; font-weight: 700; cursor: pointer;
+    font-size: 14px; padding: 12px 22px; transition: background .15s;
+  }
+  .btn:disabled { background: #AEBECB !important; color: #F0F4F8 !important; cursor: not-allowed; }
+  .btn-primary { background: #3498DB; color: #fff; flex: 1; }
+  .btn-primary:hover:not(:disabled) { background: #2980B9; }
+  .btn-ghost { background: #fff; color: #2C3E50; border: 1px solid #DCE3EA; }
+  .btn-ghost:hover:not(:disabled) { background: #EAF4FD; }
+
+  /* 进度 */
+  .prog-wrap { margin-top: 14px; }
+  .prog-bar {
+    height: 22px; background: #F5F7FA; border-radius: 11px; overflow: hidden; position: relative;
+  }
+  .prog-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #3498DB, #2ECC71);
+    border-radius: 11px; transition: width .4s ease;
+  }
+  .prog-txt {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #7F8C8D;
+  }
+  #msg { margin-top: 8px; font-size: 13px; color: #7F8C8D; min-height: 18px; }
+
+  /* 结果 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid #EEF2F6; }
+  th { color: #7F8C8D; font-size: 12px; font-weight: 600; }
+  td .reason { color: #7F8C8D; font-size: 12px; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+  .tag-fail { background: #FDECEC; color: #E74C3C; }
+  .tag-pass { background: #E8F8F0; color: #27AE60; }
+  .tag-err  { background: #F3F4F6; color: #7F8C8D; }
+  a.dl { color: #2980B9; text-decoration: none; font-weight: 600; }
+  a.dl:hover { text-decoration: underline; }
+
+  #summary { font-size: 14px; font-weight: 700; margin-top: 12px; }
+  .s-fail { color: #E74C3C; }
+  .s-ok   { color: #27AE60; }
+  .s-err  { color: #7F8C8D; }
+  .hidden { display: none; }
+  .foot { text-align: center; color: #A0ACB6; font-size: 12px; margin-top: 28px; }
+.detail-cell { background:#F8FAFC; padding:8px 10px; }
+.detail-box {
+  background:#FFFFFF; border:1px solid #E4E3DD; border-radius:8px;
+  padding:10px 12px; font-size:12px; line-height:1.7; color:#2C3E50;
+  white-space:pre-wrap; word-break:break-all; max-height:260px; overflow:auto;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title-row">
+    <h1>审核不合格数据</h1>
+    <span class="badge" id="ver">Web 版</span>
+  </div>
+
+  <div class="card">
+    <h2>输入文件</h2>
+    <div id="drop">
+      拖入 <strong>.xls / .xlsx / .xlsm</strong> 检验报告（可多选、可拖文件夹），<br>或点击此处选择文件
+    </div>
+    <input type="file" id="picker" accept=".xls,.xlsx,.xlsm" multiple style="display:none">
+    <div id="fileList"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btnClear">清空列表</button>
+      <button class="btn btn-primary" id="btnStart" disabled>开始审核</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>审核进度</h2>
+    <div class="prog-wrap">
+      <div class="prog-bar">
+        <div class="prog-fill" id="progFill"></div>
+        <div class="prog-txt" id="progTxt">0%</div>
+      </div>
+      <div id="msg">等待开始…</div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="resultCard">
+    <h2>审核结果</h2>
+    <table>
+      <thead><tr><th style="width:42%">文件</th><th style="width:16%">结论</th><th>说明 / 下载</th></tr></thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+    <div id="summary"></div>
+  </div>
+
+  <div class="foot">审核不合格数据 · v7 双引擎+规范化 · 结果文件命名自动加「不合格_」前缀，客户代码统一 0998，格式原样保留</div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var files = [];
+  var drop = document.getElementById("drop");
+  var picker = document.getElementById("picker");
+  var fileList = document.getElementById("fileList");
+  var btnStart = document.getElementById("btnStart");
+  var btnClear = document.getElementById("btnClear");
+  var progFill = document.getElementById("progFill");
+  var progTxt = document.getElementById("progTxt");
+  var msg = document.getElementById("msg");
+  var resultCard = document.getElementById("resultCard");
+  var resultBody = document.getElementById("resultBody");
+  var summary = document.getElementById("summary");
+  var polling = false;
+
+  var EXTS = [".xls", ".xlsx", ".xlsm"];
+
+  function isExcel(name) {
+    var n = name.toLowerCase();
+    return EXTS.some(function (e) { return n.endsWith(e); });
+  }
+
+  function renderList() {
+    fileList.innerHTML = "";
+    files.forEach(function (f, i) {
+      var div = document.createElement("div");
+      div.className = "fitem";
+      var span = document.createElement("span");
+      span.className = "name";
+      span.textContent = f.name + (f.size ? "（" + fmtSize(f.size) + "）" : "");
+      span.title = f.name;
+      var rm = document.createElement("button");
+      rm.className = "rm";
+      rm.textContent = "✕";
+      rm.title = "移除";
+      rm.addEventListener("click", function () { files.splice(i, 1); renderList(); });
+      div.appendChild(span);
+      div.appendChild(rm);
+      fileList.appendChild(div);
+    });
+    btnStart.disabled = files.length === 0 || polling;
+  }
+
+  function fmtSize(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1048576).toFixed(1) + " MB";
+  }
+
+  function addFiles(list) {
+    var seen = {};
+    files.forEach(function (f) { seen[f.name + "|" + f.size] = 1; });
+    list.forEach(function (f) {
+      if (!isExcel(f.name)) return;
+      var k = f.name + "|" + f.size;
+      if (!seen[k]) { seen[k] = 1; files.push(f); }
+    });
+    renderList();
+  }
+
+  drop.addEventListener("click", function () { picker.click(); });
+  picker.addEventListener("change", function () { addFiles(Array.prototype.slice.call(picker.files)); picker.value = ""; });
+  drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("hover"); });
+  drop.addEventListener("dragleave", function () { drop.classList.remove("hover"); });
+  drop.addEventListener("drop", function (e) {
+    e.preventDefault();
+    drop.classList.remove("hover");
+    var got = [];
+    var items = e.dataTransfer.items || [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.kind === "file" && it.webkitGetAsEntry && it.webkitGetAsEntry().isDirectory) {
+        walkDir(it.webkitGetAsEntry(), got);
+      } else if (it.getAsFile) {
+        var f = it.getAsFile();
+        if (f) got.push(f);
+      }
+    }
+    if (!got.length && e.dataTransfer.files) {
+      got = Array.prototype.slice.call(e.dataTransfer.files);
+    }
+    addFiles(got);
+  });
+
+  function walkDir(entry, out) {
+    var reader = entry.createReader();
+    reader.readEntries(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isFile) { en.file(function (f) { if (isExcel(f.name)) out.push(f); }, function () {}); }
+        else if (en.isDirectory) walkDir(en, out);
+      });
+    }, function () {});
+  }
+
+  btnClear.addEventListener("click", function () { if (!polling) { files = []; renderList(); } });
+
+  // ---- 上传 + 轮询 ----
+  function setProgress(pct, text) {
+    progFill.style.width = pct + "%";
+    progTxt.textContent = Math.round(pct) + "%";
+    if (text) msg.textContent = text;
+  }
+
+  function upload() {
+    if (!files.length || polling) return;
+    polling = true;
+    renderList();
+    resultCard.classList.add("hidden");
+    resultBody.innerHTML = "";
+    summary.textContent = "";
+    setProgress(0, "上传中…");
+
+    var fd = new FormData();
+    files.forEach(function (f) { fd.append("files", f, f.name); });
+
+    fetch("/api/audit", { method: "POST", body: fd })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.detail || "上传失败");
+        setProgress(2, "任务已创建，开始审核…");
+        poll(res.j.task_id, 0);
+      })
+      .catch(function (e) {
+        polling = false;
+        renderList();
+        setProgress(0, "上传失败：" + e.message);
+        msg.style.color = "#E74C3C";
+      });
+  }
+
+  function poll(taskId, n) {
+    fetch("/api/tasks/" + taskId)
+      .then(function (r) { return r.json(); })
+      .then(function (t) {
+        setProgress(t.progress, t.message || "");
+        if (t.status === "done" || t.status === "error") {
+          renderResults(t);
+          polling = false;
+          renderList();
+          return;
+        }
+        setTimeout(function () { poll(taskId, n + 1); }, 800);
+      })
+      .catch(function () {
+        // 短暂网络抖动：最多重试 3 次
+        if (n < 3) setTimeout(function () { poll(taskId, n + 1); }, 1500);
+        else {
+          polling = false;
+          renderList();
+          setProgress(0, "轮询失败，请检查服务是否仍在运行");
+          msg.style.color = "#E74C3C";
+        }
+      });
+  }
+
+  function renderResults(t) {
+    var fails = 0, passes = 0, errs = 0, fdMissing = 0;
+    resultBody.innerHTML = "";
+    t.files.forEach(function (f) { f.idx = resultBody.children.length;
+      var tr = document.createElement("tr");
+      var tdN = document.createElement("td");
+      tdN.textContent = f.name;
+      tdN.title = f.name;
+      var tdC = document.createElement("td");
+      var tag = document.createElement("span");
+      if (f.status === "error") { tag.className = "tag tag-err"; tag.textContent = "失败"; errs++; }
+      else if (f.conclusion === "不合格") { tag.className = "tag tag-fail"; tag.textContent = "不合格"; fails++; }
+      else { tag.className = "tag tag-pass"; tag.textContent = "合格"; passes++; }
+      tdC.appendChild(tag);
+      var tdD = document.createElement("td");
+
+      // 报告规范化信息（与合格/不合格并列展示）
+      var norm = f.norm || {};
+      var normParts = [];
+      if (norm.customer_code && norm.customer_code.changed) normParts.push("客户代码→0998");
+      if (norm.slash_filled) normParts.push("填/ " + norm.slash_filled + " 个");
+      if (norm.final_missing) { normParts.push("⚠️最终判定未填写"); fdMissing++; }
+      if (normParts.length) {
+        var nv = document.createElement("div");
+        nv.className = "reason";
+        nv.style.color = norm.final_missing ? "#E74C3C" : "#8E6F1F";
+        nv.style.fontWeight = "600";
+        nv.textContent = normParts.join(" ｜ ");
+        nv.title = normParts.join(" ｜ ");
+        tdD.appendChild(nv);
+      }
+
+      if (f.output) {
+        var a = document.createElement("a");
+        a.className = "dl";
+        a.href = "/api/tasks/" + t.id + "/download/" + encodeURIComponent(f.output);
+        a.textContent = "下载结果";
+        tdD.appendChild(a);
+        var sp = document.createElement("div");
+        sp.className = "reason";
+        sp.textContent = f.reason || "";
+        sp.title = f.reason || "";
+        tdD.appendChild(sp);
+      } else {
+        var sp2 = document.createElement("div");
+        sp2.className = "reason";
+        sp2.textContent = f.reason || "未知错误";
+        sp2.title = f.reason || "";
+        tdD.appendChild(sp2);
+      }
+      tr.appendChild(tdN); tr.appendChild(tdC); tr.appendChild(tdD);
+
+      // 详情列：点击展开该文件的操作日志
+      var tdL = document.createElement("td");
+      tdL.style.textAlign = "center";
+      var btnL = document.createElement("button");
+      btnL.className = "btn btn-ghost";
+      btnL.style.padding = "4px 10px";
+      btnL.style.fontSize = "12px";
+      btnL.textContent = "详情";
+      btnL.addEventListener("click", (function (f) {
+        return function () {
+          var row = document.getElementById("detail-" + f.idx);
+          if (row) { row.remove(); return; }
+          var dr = document.createElement("tr");
+          dr.id = "detail-" + f.idx;
+          var dc = document.createElement("td");
+          dc.colSpan = 4;
+          dc.className = "detail-cell";
+          var pre = document.createElement("div");
+          pre.className = "detail-box";
+          var lines = [];
+          lines.push("判定: " + (f.conclusion || "") + (f.output ? " | 输出: " + f.output : ""));
+          (f.log || []).forEach(function (l) {
+            var mark = l.level === "err" ? "✘" : (l.level === "warn" ? "▲" : "·");
+            lines.push(mark + " " + l.op + "：" + l.msg);
+          });
+          if (!(f.log || []).length) lines.push("（无操作记录）");
+          if (f.reason) { lines.push("----"); lines.push("判定说明: " + f.reason); }
+          pre.textContent = lines.join("\n");
+          dc.appendChild(pre);
+          dr.appendChild(dc);
+          tr.parentNode.insertBefore(dr, tr.nextSibling);
+        };
+      })(f));
+      tdL.appendChild(btnL);
+      tr.appendChild(tdL);
+
+      resultBody.appendChild(tr);
+    });
+
+    var s = document.createElement("div");
+    s.id = "summary";
+    var parts = [];
+    if (fails) parts.push('<span class="s-fail">不合格 ' + fails + '</span>');
+    if (passes) parts.push('<span class="s-ok">合格 ' + passes + '</span>');
+    if (errs) parts.push('<span class="s-err">失败 ' + errs + '</span>');
+    if (fdMissing) parts.push('<span class="s-fail">⚠️最终判定未填写 ' + fdMissing + '</span>');
+    s.innerHTML = parts.join(" ｜ ") || "无结果";
+    summary.textContent = "";
+    summary.appendChild(s);
+    resultCard.classList.remove("hidden");
+    msg.style.color = "#7F8C8D";
+    setProgress(100, t.message || "全部完成");
+  }
+
+  btnStart.addEventListener("click", upload);
+})();
+</script>
+</body>
+</html>

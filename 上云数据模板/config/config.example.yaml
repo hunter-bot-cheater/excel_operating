@@ -1,0 +1,14 @@
+app:
+  host: 127.0.0.1
+  port: 8002
+  cors_origins: []
+  auth_enabled: false
+paths:
+  output_dir: output
+  log_dir: logs
+  runtime_dir: backend/.runtime
+excel:
+  com_enabled: true
+  max_workers: 1
+conversion:
+  default_year: null

@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info: {title: 特殊文件格式转换 API, version: 0.1.0}
+paths:
+  /api/v1/special-format-conversions/convert:
+    post:
+      summary: 上传特殊格式检验报告并转换为模板
+      requestBody:
+        required: true
+        content: {multipart/form-data: {schema: {type: object, required: [file], properties: {file: {type: string, format: binary}, force_openpyxl: {type: boolean, default: false}}}}}
+      responses: {'200': {description: 已接收}, '422': {description: 输入格式错误}}
+  /api/v1/special-format-conversions/tasks/{task_id}:
+    get:
+      parameters: [{name: task_id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: 任务状态}, '404': {description: 不存在}}
+  /api/v1/special-format-conversions/tasks/{task_id}/downloads/{filename}:
+    get:
+      parameters: [{name: task_id, in: path, required: true, schema: {type: string}}, {name: filename, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: 文件流}}

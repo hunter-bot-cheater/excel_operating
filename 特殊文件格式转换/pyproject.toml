@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "special-format-conversion"
+version = "0.1.0"
+description = "特殊格式检验报告模板转换兼容包装工程"
+requires-python = ">=3.10"
+dependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "openpyxl>=3.1"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests", "tests"]

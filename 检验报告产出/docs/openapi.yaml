@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info: {title: 检验报告产出 API, version: 0.1.0}
+paths:
+  /api/v1/inspection-reports/generate:
+    post:
+      summary: 上传 BOM 和报告池并生成检验报告
+      requestBody:
+        required: true
+        content: {multipart/form-data: {schema: {type: object, required: [bom, reports], properties: {bom: {type: string, format: binary}, reports: {type: array, items: {type: string, format: binary}}, round_no: {type: integer, nullable: true}}}}}
+      responses: {'200': {description: 已接收}}
+  /api/v1/inspection-reports/tasks/{task_id}:
+    get:
+      parameters: [{name: task_id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: 任务状态}, '404': {description: 不存在}}
+  /api/v1/inspection-reports/tasks/{task_id}/downloads/{filename}:
+    get:
+      parameters: [{name: task_id, in: path, required: true, schema: {type: string}}, {name: filename, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: 文件流}}

@@ -1,0 +1,15 @@
+from pathlib import Path
+
+
+def test_legacy_core_copy_exists():
+    root = Path(__file__).resolve().parents[2]
+    assert (root / "legacy" / "original_src" / "audit_fail.py").is_file()
+
+
+def test_compat_entry_exports_original_api():
+    import sys
+    root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root))
+    import audit_fail
+    assert callable(audit_fail.audit_file)
+    assert callable(audit_fail.audit_paths)

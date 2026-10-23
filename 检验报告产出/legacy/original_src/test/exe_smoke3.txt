@@ -1,0 +1,2 @@
+﻿RUNNING_OK: GUI initialized PID=39784
+KILLED after smoke test

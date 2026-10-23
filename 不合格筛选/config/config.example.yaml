@@ -1,0 +1,13 @@
+app:
+  host: 127.0.0.1
+  port: 8000
+  cors_origins: []
+  auth_enabled: false
+  task_ttl_hours: 24
+paths:
+  output_dir: output
+  log_dir: logs
+  runtime_dir: backend/.runtime
+excel:
+  com_enabled: true
+  max_workers: 1
