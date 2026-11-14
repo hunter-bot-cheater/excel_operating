@@ -39,19 +39,40 @@ def _is_dwg_err(r):
                for l in (r.get("log") or []))
 
 
+def _is_dwg_warn(r):
+    """图号不完全一致：有字段相同，但整串对不上（黄色提示，不算错误）。"""
+    return any(l.get("level") == "warn" and l.get("op") == "图号"
+               for l in (r.get("log") or []))
+
+
+def _result_warn_n(r):
+    """结果列里程序没认出来的格子数（黄色提示，不改判定）。"""
+    for l in (r.get("log") or []):
+        if l.get("level") == "warn" and l.get("op") == "结果列待核":
+            try:
+                return int(l.get("n") or 1)
+            except Exception:
+                return 1
+    return 0
+
+
+def _is_result_warn(r):
+    return _result_warn_n(r) > 0
+
+
 def _load_version():
     _cands = [_os.path.join(_exe_dir, "VERSION")]
     if _MEIPASS:
         _cands.append(_os.path.join(_MEIPASS, "VERSION"))
     for _c in _cands:
         try:
-            with open(_c, "r", encoding="utf-8") as _vf:
+            with open(_c, "r", encoding="utf-8-sig") as _vf:
                 _v = _vf.read().strip()
                 if _v:
                     return _v
         except Exception:
             pass
-    return "5"
+    return "19"
 
 
 VERSION = _load_version()
@@ -75,7 +96,17 @@ from PySide6.QtWidgets import (
     QDialog, QPlainTextEdit, QScrollArea,
 )
 
-import audit_fail  # 审核核心（同一目录）
+# 核心模块延迟导入：audit_fail 会连带导入 openpyxl，约占冷启动一半时间，
+# 而用户在拖入文件之前根本用不到它。先让窗口出来，第一次真正干活时再导入。
+_core = None
+
+
+def _core_mod():
+    global _core
+    if _core is None:
+        import audit_fail as m
+        _core = m
+    return _core
 
 # --------------------------------------------------------------------------- #
 # 配色方案（与转换工具一致：Fluent / Material 风的柔和蓝灰系）
@@ -93,6 +124,7 @@ C_PROG_A = "#3498DB"    # 进度渐变起
 C_PROG_B = "#2ECC71"    # 进度渐变止
 C_OK = "#27AE60"        # 完成绿
 C_ERR = "#E74C3C"       # 错误红
+C_WARN = "#E6A23C"      # 提醒橙黄（图号不完全一致等）
 
 # 支持的输入格式（审核只处理 Excel）
 SUPPORTED_EXTENSIONS = (".xls", ".xlsx", ".xlsm")
@@ -147,6 +179,16 @@ class AuditWorker(QThread):
         self.out_dir = out_dir or None
         self.pres = {}
         self.bad_pre = []
+        self._pool = None
+
+    def stop(self):
+        """界面关闭时调用：立刻杀掉 worker（含各自的 Excel），让 run 尽快返回。"""
+        p = self._pool
+        if p is not None:
+            try:
+                p.cancel()
+            except Exception:  # noqa: BLE001
+                pass
 
     def run(self):
         results = []
@@ -158,12 +200,30 @@ class AuditWorker(QThread):
                 "norm": {}, "log": [],
             })
         total = len(self.files) + bad_n
+        state = {"done": bad_n, "pct": 0}
+
+        def _emit_pct(val, msg):
+            # 只许前进，不许回退（phase / progress 交织时否则会来回跳）
+            val = max(state["pct"], min(100, int(val)))
+            state["pct"] = val
+            self.progress.emit(val, msg)
 
         def on_event(e):
             if e["type"] == "progress":
-                done = e["done"] + bad_n
-                pct = int(done / total * 100) if total else 100
-                self.progress.emit(pct, f"[{done}/{total}]")
+                state["done"] = e["done"] + bad_n
+                pct = state["done"] / total * 100 if total else 100
+                _emit_pct(pct, f"[{state['done']}/{total}]")
+            elif e["type"] == "phase":
+                # 单份文件内部 0-100，折算成整批进度：done + 当前文件百分比
+                fp = e.get("pct")
+                try:
+                    fp = float(fp)
+                except Exception:  # noqa: BLE001
+                    fp = 0.0
+                overall = ((state["done"] + max(0.0, min(100.0, fp)) / 100.0) / total * 100
+                           if total else 0)
+                msg = str(e.get("msg") or "")
+                _emit_pct(overall, f"[{state['done']}/{total}] {msg}"[:60])
             elif e["type"] == "retry":
                 self.status.emit(
                     f"[重试 {e['attempt']}/{e['max']}] "
@@ -180,9 +240,11 @@ class AuditWorker(QThread):
                 self.file_done.emit(r)
 
         if self.files:
-            pool = audit_fail.BatchPool()
+            pool = _core_mod().BatchPool()
+            self._pool = pool
             results.extend(pool.run(self.files, self.out_dir,
                                     on_event=on_event, pres=self.pres))
+            self._pool = None
         if total:
             self.progress.emit(100, "全部完成")
         self.finished.emit(results)
@@ -205,7 +267,7 @@ class PreloadWorker(QThread):
         out = {}
         for f in self.files:
             try:
-                out[f] = audit_fail.precheck(f)
+                out[f] = _core_mod().precheck(f)
             except Exception:
                 out[f] = {"ok": False, "error": "预检失败", "plans": [],
                           "shifts": [], "fill_counts": {}}
@@ -422,9 +484,48 @@ class AuditApp(QWidget):
         self.input_files = []
         self.out_dir = ""
         self.worker = None
-        self._preload_worker = None
+        # 预检线程必须逐个留引用：只存"最后一个"时，前一个还在跑就被回收，
+        # Qt 会直接 abort（程序无声消失，连 traceback 都没有）。
+        self._preload_workers = []
         self.last_outputs = []  # 最近一次审核的输出文件路径列表
         self._build_ui()
+
+    def closeEvent(self, e):
+        """关窗口时必须先收掉 worker：否则 QThread 还在跑、子进程和 Excel 都活着，
+        进程退出后没人收尸（正是「任务跑到一半随手关掉」会留僵尸 EXCEL 的原因）。"""
+        w = self.worker
+        if w is not None and w.isRunning():
+            r = QMessageBox.question(
+                self, "正在处理",
+                "还有文件在处理中，现在退出会中止当前批次。\n确定要退出吗？",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if r != QMessageBox.Yes:
+                e.ignore()
+                return
+            try:
+                w.stop()
+            except Exception:  # noqa: BLE001
+                pass
+            w.wait(3000)      # 给池时间杀 worker / 关 Excel，最多 3s
+        # 预检线程也要收掉：窗口先于线程销毁同样会 abort
+        self.reap_preload()
+        e.accept()
+
+    def reap_preload(self, wait_ms=3000):
+        """收掉所有预检线程（关窗口、进程退出两条路都走这里）。
+
+        不这么做的话，线程还在跑而对象先被销毁，Qt 会直接 abort，
+        用户看到的就是「程序自己消失了」。
+        """
+        self._closing = True
+        self._pre_queue = []
+        for pw in list(getattr(self, "_preload_workers", [])):
+            if pw.isRunning():
+                pw.wait(wait_ms)
+                if pw.isRunning():
+                    pw.terminate()
+                    pw.wait(500)
+        self._preload_workers = []
 
     # ----------------------------- UI 构建 ----------------------------- #
     def _build_ui(self):
@@ -715,22 +816,56 @@ class AuditApp(QWidget):
         self._update_start_state()
 
     def _start_preload(self, paths):
-        """后台预检新加入的文件（可读性 + 布局计划），点开始时直接复用。"""
+        """后台预检新加入的文件（可读性 + 布局计划），点开始时直接复用。
+
+        只允许一个预检线程在跑，后来的路径排队 —— 连续拖入多次时若并发开多个
+        线程，.xls 会同时拉起多个 Excel，既慢又容易卡死。
+        """
         if not paths:
             return
         if not hasattr(self, "pre_map"):
             self.pre_map = {}
-        w = PreloadWorker(paths)
+        if not hasattr(self, "_pre_queue"):
+            self._pre_queue = []
+        for p in paths:
+            if p not in self._pre_queue:
+                self._pre_queue.append(p)
+        self._pump_preload()
+
+    def _pump_preload(self):
+        """有线程在跑就等它结束，没有就取队首一批开跑。"""
+        if getattr(self, "_closing", False):
+            return
+        if getattr(self, "_preload_workers", None):
+            return
+        queue = getattr(self, "_pre_queue", None)
+        if not queue:
+            return
+        batch = list(queue)
+        self._pre_queue = []
+        w = PreloadWorker(batch)
         w.done.connect(self._on_preloaded)
-        w.finished.connect(lambda: setattr(self, "_preload_worker", None))
-        self._preload_worker = w
+        # 放进列表持有，结束时只移除"自己"（用默认参数把 w 绑进 lambda，
+        # 否则先结束的那个会把别人的引用一起清空）
+        self._preload_workers.append(w)
+        w.finished.connect(lambda w=w: self._drop_preload(w))
         w.start()
+
+    def _drop_preload(self, w):
+        """预检线程结束后摘掉引用并交给 Qt 释放，然后接着做排队中的文件。"""
+        try:
+            self._preload_workers.remove(w)
+        except ValueError:
+            pass
+        w.deleteLater()
+        self._pump_preload()
 
     def _on_preloaded(self, out):
         self.pre_map.update(out)
 
     def _clear_files(self):
         self.input_files = []
+        self._pre_queue = []
         self.file_list.clear_files()
         self._update_start_state()
 
@@ -764,6 +899,9 @@ class AuditApp(QWidget):
         bad_pre = [(f, pres[f].get("error", "文件无法读取"))
                    for f in files if f in pres and not pres[f].get("ok")]
         good = [f for f in files if f not in pres or pres[f].get("ok")]
+        old = self.worker
+        if old is not None and not old.isRunning():
+            old.deleteLater()   # 上一批已结束，先交出去再换新的，避免引用被顶掉
         self.worker = AuditWorker(good, self.out_dir)
         self.worker.pres = pres
         self.worker.bad_pre = bad_pre
@@ -803,13 +941,23 @@ class AuditApp(QWidget):
             return
         base = os.path.basename(r["file"])
         dwg = _is_dwg_err(r)
+        dwg_warn = _is_dwg_warn(r)
+        res_warn = _result_warn_n(r)
         if r.get("fail"):
             tag, row_color = "不合格", C_ERR
         elif dwg:
             tag, row_color = "图号错误", C_ERR
+        elif dwg_warn:
+            tag, row_color = "图号待核", C_WARN
+        elif res_warn:
+            tag, row_color = "结果待核", C_WARN
         else:
             tag, row_color = "合格", C_OK
         marks = []
+        if dwg_warn:
+            marks.append("图号不完全一致")
+        if res_warn:
+            marks.append("结果列待核 %d 格" % res_warn)
         for l in r.get("log", []):
             if l.get("op") == "结果列缺失":
                 marks.append("结果列补全")
@@ -841,6 +989,11 @@ class AuditApp(QWidget):
         failed = [r for r in results if r.get("ok") and r.get("fail")]
         dwgbad = [r for r in results
                   if r.get("ok") and not r.get("fail") and _is_dwg_err(r)]
+        dwgwarn = [r for r in results
+                   if r.get("ok") and not r.get("fail") and not _is_dwg_err(r)
+                   and _is_dwg_warn(r)]
+        reswarn = [r for r in results
+                   if r.get("ok") and not r.get("fail") and _is_result_warn(r)]
         passed = [r for r in results
                   if r.get("ok") and not r.get("fail") and not _is_dwg_err(r)]
         errored = [r for r in results if not r.get("ok")]
@@ -872,12 +1025,29 @@ class AuditApp(QWidget):
             if passed:
                 txt += f"（{names(passed)}）"
             color = C_OK
+            if dwgwarn:
+                txt += f" ｜ ⚠️ 图号不完全一致 {len(dwgwarn)} 个（数据合格，请核对图号）：" \
+                       + "、".join(os.path.basename(r["file"]) for r in dwgwarn)
+                color = C_WARN
+            if reswarn:
+                txt += " ｜ ⚠️ 结果列待核 %d 个（有程序没认出的写法，未判合格/不合格，请人工看）：%s" \
+                       % (len(reswarn),
+                          "、".join(os.path.basename(r["file"]) for r in reswarn))
+                color = C_WARN
         else:
             parts = []
             if failed:
                 parts.append(f"不合格 {len(failed)} 个：{names(failed)}")
             if dwgbad:
                 parts.append(f"图号错误 {len(dwgbad)} 个（数据合格，请核对图号命名）：{names(dwgbad)}")
+            if dwgwarn:
+                parts.append("图号不完全一致 %d 个（数据合格，请核对图号）：%s"
+                             % (len(dwgwarn),
+                                "、".join(os.path.basename(r["file"]) for r in dwgwarn)))
+            if reswarn:
+                parts.append("结果列待核 %d 个（有程序没认出的写法，未判合格/不合格）：%s"
+                             % (len(reswarn),
+                                "、".join(os.path.basename(r["file"]) for r in reswarn)))
             if passed:
                 parts.append(f"合格 {len(passed)} 个：{names(passed)}")
             if errored:
@@ -917,12 +1087,12 @@ class AuditApp(QWidget):
                 return 1
             if _is_dwg_err(r):
                 return 2
-            return 3
+            if _is_dwg_warn(r) or _is_result_warn(r):
+                return 3      # 待核的排在合格前面，别被淹没
+            return 4
 
         for r in sorted(results, key=_key):
             self._append_result_row(r)
-        if not results:
-            self.result_list.clear()
 
         # 审核完成后自动清空拖入框，便于继续拖入新文件
         self.input_files = []
@@ -937,6 +1107,9 @@ class AuditApp(QWidget):
         lines = []
         lines.append("文件: %s" % os.path.basename(r["file"]))
         lines.append("判定: %s" % ("不合格" if r.get("fail") else "合格"))
+        if _result_warn_n(r):
+            lines.append("提醒: 结果列有 %d 格程序没认出的写法，未计入合格/不合格，请人工核对"
+                         % _result_warn_n(r))
         out = r.get("output")
         if out:
             lines.append("输出: %s" % out)
@@ -998,7 +1171,81 @@ class AuditApp(QWidget):
 # --------------------------------------------------------------------------- #
 # 入口
 # --------------------------------------------------------------------------- #
+# 只有这台开发机留崩溃日志。客户机名不在白名单里，程序连一个文件都不会生成。
+# 万一客户现场需要排查，让对方临时设环境变量 WB_CRASH_LOG=1 再跑一次即可。
+_CRASH_LOG_HOSTS = {"LAPTOP-0DOD8O2Q"}
+
+
+def _crash_log_enabled():
+    import os
+    import platform
+    if os.environ.get("WB_CRASH_LOG") == "1":
+        return True
+    try:
+        return platform.node().upper() in _CRASH_LOG_HOSTS
+    except Exception:
+        return False
+
+
+def _install_crash_guard():
+    """把崩溃痕迹写进程序同目录 crash.log（仅本机）。
+
+    窗口化 exe 没有控制台，缺这一层时进程消失后什么都查不到：
+    - Python 层未捕获异常 -> sys.excepthook
+    - Qt 自己的致命消息（例如 QThread 还在跑就被销毁）-> qInstallMessageHandler
+    - 内存/段错误 -> faulthandler
+    """
+    if not _crash_log_enabled():
+        return
+    import datetime
+    import faulthandler
+    import traceback
+    from PySide6.QtCore import qInstallMessageHandler
+
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    log_path = os.path.join(base, "crash.log")
+    state = {"n": 0}
+
+    def _write(text):
+        if state["n"] > 500:      # 防止反复刷日志把磁盘占满
+            return
+        state["n"] = state["n"] + 1
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(text)
+        except Exception:
+            pass
+
+    def _hook(typ, val, tb):
+        _write("=== %s [python] ===\n" % datetime.datetime.now())
+        _write("".join(traceback.format_exception(typ, val, tb)))
+        sys.__excepthook__(typ, val, tb)
+
+    sys.excepthook = _hook
+
+    def _qt_handler(mode, context, message):
+        # 只记严重/致命（QtDebugMsg=0, QtWarningMsg=1, QtCriticalMsg=2, QtFatalMsg=3）。
+        # 普通 warning 太吵（字体/高分屏提示每条都写），日志会越滚越大。
+        try:
+            if int(mode) not in (2, 3):
+                return
+        except Exception:
+            pass
+        _write("=== %s [qt] ===\n%s\n" % (datetime.datetime.now(), message))
+
+    qInstallMessageHandler(_qt_handler)
+    try:
+        _install_crash_guard._fh = open(log_path, "a", encoding="utf-8")
+        faulthandler.enable(file=_install_crash_guard._fh)
+    except Exception:
+        pass
+
+
 def main():
+    _install_crash_guard()
     # 高 DPI 缩放（Qt6 默认开启，旧属性已废弃，安全设置）
     for attr in ("AA_EnableHighDpiScaling", "AA_UseHighDpiPixmaps"):
         if hasattr(Qt, attr):
@@ -1009,6 +1256,8 @@ def main():
     app.setStyleSheet("QMessageBox{font-family:'Microsoft YaHei','Segoe UI';}")
     win = AuditApp()
     win.show()
+    # app.quit() 这条路不经过 closeEvent，这里补一次收线程，避免退出时挂住
+    app.aboutToQuit.connect(win.reap_preload)
     sys.exit(app.exec())
 
 
@@ -1020,5 +1269,5 @@ if __name__ == "__main__":
             if _i + 1 < len(sys.argv):
                 _out = sys.argv[_i + 1]
         import audit_fail
-        sys.exit(audit_fail.run_worker_mode(_out))
+        sys.exit(_core_mod().run_worker_mode(_out))
     main()
