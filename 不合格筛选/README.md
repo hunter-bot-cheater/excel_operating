@@ -1,69 +1,155 @@
-# 不合格筛选
+# 不合格筛选（AuditFail）
 
-## 项目用途与来源
+把客户送来的检验报告批量过一遍，**无论检验员结果列是否标 F，程序都会逐行独立扫描实测值 × 上下限**。不合格的文件另存一份到指定目录，文件名加前缀；原文件一律不动。前缀规则：
 
-本项目从只读备份 `D:\文件转换不改格式` 整理而来，用于审核 `.xls/.xlsx/.xlsm` 检验报告，筛选不合格项并输出规范化后的工作簿。项目根目录的 `audit_fail.py`、`api.py`、`audit_fail_gui.py` 是可直接维护和运行的原始程序；`legacy/original_src` 保留迁移副本。**业务判定、命名、编码、默认参数和 Excel 格式规则均未改写。**
+- 数据写出但超出上下限（含写出但区间内被标 F）→ `数据不合格_`
+- 仅因数据列未写数据（填 `/`）被判不合格 → `不合格_`
+- 图号与文件名不符 → `图号错误_`
+- 上下限空白被自动补 `/`（规格留空，非不合格）→ 不加任何前缀
 
-## 功能清单
+判不合格的单元格会标红底并写上 `F`，合格的写 `P`。
 
-- 输入：单文件、文件夹或 API 上传的 `.xls/.xlsx/.xlsm`；输出：原名或 `不合格_` 前缀的同格式工作簿，同名自动避让。
-- 处理：全工作表扫描结果/测量/上下限；命中时只标红结果单元格并按旧规则写 `F`；同时保留旧版客户代码 `0998`、最终判定和上下限 `/` 规范化。
-- 边界：无公式的普通 xlsx/xlsm 用 openpyxl；公式、xls 或复杂对象降级 Windows Excel COM。源文件不会被覆盖。
+## 一条完整的处理链路
 
-## 目录结构
+```
+拖入文件 → 逐文件：
+  1. 读表（openpyxl 快读 / COM 读，两条路径结果必须一致）
+  2. 探测表头：找「结果」列、「测量数据」起止列、数据起始行、图号单元格
+  3. 判定：
+       a. 结果列整格匹配 15 项不合格词 → 不合格
+       b. 结果列是「F + 中文备注」（F(略) / F超差）→ 不合格
+       c. 实测值 > 上限 或 < 下限（闭区间，等于边界算合格）→ 不合格
+       d. 源结果列已经是 P 的，绝不被数值判定改写
+  4. 另存副本到输出目录（绝不覆盖原文件）
+  5. 标注：不合格格写 F + 红底，合格格写 P
+  6. 命名：数据超差 → `数据不合格_`；仅数据缺失（`/`）→ `不合格_`；图号不符 → `图号错误_`；重名 → (1)(2)
+```
 
-根目录原始程序为维护源；`legacy/original_src` 是迁移时副本；`backend/app/services` 是用例包装，`adapters` 从项目根加载原始代码；`domain` 是请求契约；`api/v1` 是 FastAPI 路由；`frontend/src/api` 是前端请求占位；`config`、`docs`、`tests`、`output`、`logs` 分别存放示例配置、文档、验证、运行产物和日志。
+图号从报告里的「DWG No」单元格读；读不到就用文件名前半段。跟 BOM 无关，这个工具只看单份报告内部。
 
-## 环境、安装与配置
+## 目录与职责
 
-- Windows 10/11、Python 3.10+；要完整处理公式、xls 或复杂 Excel 文件，请安装桌面 Excel 和 `pywin32`。
-- `python -m pip install -r requirements.txt`
-- 复制 `config/config.example.yaml` 或 `.env.example` 后按环境修改；不得把账号、密码、密钥写入仓库。默认输出路径在项目 `output/`，API 临时文件在 `backend/.runtime/`。
+| 路径 | 职责 |
+|---|---|
+| `audit_fail.py` | 全部核心逻辑：判定、标注、命名、并发池、Excel 会话 |
+| `audit_fail_gui.py` | PySide6 界面，只做交互与结果展示，不碰 Excel |
+| `regression_test.py` | 8 个真实样本的回归，**改判定必须跑** |
+| `test_samples/_verify_a_unify.py` | 命名/避让/异常的单测 |
+| `test_samples/` | 样本报告 |
+| `analysis/a18/verify_token_a18.py` | 15 项 token 的逐项验收 |
+| `AuditFail.spec` | PyInstaller 打包配置 |
 
-## 运行方式
+## 运行
 
-- 旧 GUI：`python audit_fail_gui.py`
-- 旧核心调用：`python -c "import audit_fail; print(audit_fail.audit_file(r'输入.xlsx', r'output'))"`
-- 新 API：`python scripts/run_api.py`，或在 `backend` 下运行 `python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1`。
-- 测试：`python -m pytest`。COM 场景必须在安装 Excel 的 Windows 机器上人工复核。
+```bash
+python audit_fail_gui.py          # 界面
+python regression_test.py         # 回归（必须 8/8）
+python test_samples/_verify_a_unify.py
+```
 
-## 核心函数/类
+打包：`pyinstaller AuditFail.spec --noconfirm`，产物在 `dist/`。
 
-| 旧函数/类 | 参数/返回 | 异常与说明 |
-| --- | --- | --- |
-| `audit_file(input_path, out_dir=None, on_progress=None, session=None)` | 返回 `input/output/is_fail/reason/norm` 字典 | 文件不存在、Excel/COM 或解析错误向调用者抛出 |
-| `audit_paths(paths, out_dir=None, on_progress=None)` | 返回 `total/fail` | 批量共享一个 Excel COM 会话 |
-| `scan_fails(path)` / `detect_fail(path)` | 不改变旧调用签名 | 仅扫描/判定；实现仍在 legacy |
-| `ExcelSession` | COM 会话复用 | 只能串行使用 |
+## 并发模型
 
-## API、数据格式与错误
+主进程只做界面。真正干活的是 `BatchPool`：
 
-- `POST /api/v1/nonconforming/screen`：multipart 字段 `files`，提交后返回 `task_id`。
-- `GET /api/v1/nonconforming/tasks/{task_id}`：查询进度、旧函数返回值和可下载文件。
-- `GET /api/v1/nonconforming/tasks/{task_id}/downloads/{filename}`：下载输出。
-- 所有成功响应为 `{"code":0,"message":"ok|accepted","data":{},"trace_id":"..."}`；422 是输入扩展名错误，404 是任务/文件不存在，任务 `status=failed` 保留原异常文本。
-- 文件必须是原工具支持的 Excel 格式；保留原工作簿编码、模板字段、工作表和命名规则。字段细节见 [数据结构](docs/数据结构.md)。
+0. **并行阈值**：文件数 < `PARALLEL_MIN_FILES`（=6）或机器逻辑核数 < 4 时，只起 1 个
+   worker 串行跑。依据是实测：1-5 份时并行 0.87x-0.96x（比串行还慢，Excel 冷启动
+   开销抵不过收益），6 份起才稳定为正收益。改阈值前先跑基准，别凭感觉调。
+1. 起 2 个 worker 子进程（`--worker-mode`），每个 worker 自己 `DispatchEx` 一个独立 Excel
+2. worker 启动后先发 `ready`，父进程收到才派任务
+3. 单文件超时（默认 30s）→ 先 `taskkill` 该 worker 的 `excel_pid`，再杀 worker，该文件重试 1 次
+4. 单文件失败只记该条，整批不中断
 
-## 测试与验收
+**为什么每 worker 一个 Excel**：共用实例时一个文件把 Excel 搞崩，后面每个文件都失败，且坏句柄的 RPC 调用会挂很久。
 
-运行 `python -m pytest` 验证兼容入口和源码副本。再以原样本在“原目录”和新项目的**副本**各运行一次，比对文件名、每张表的值/公式/合并区域/行列尺寸、红色结果格以及 Excel 可打开性；不要要求 xlsx ZIP 字节完全一致。详见 [测试与验收](docs/测试与验收.md)。
+## 判定口径（唯一真相）
 
-## 扩展兼容性、安全与日志
+`_is_fail_token(v)` 的规范化顺序，改任何一步都会改变结果：
 
-接口已预留 `/api/v1`、CORS 配置、`auth_enabled`、Bearer JWT/API Key 接入点、异步任务 ID 和前端 baseURL。Docker、数据库、队列、对象存储、多用户与权限只能在不改变 legacy 业务函数的适配层增加。上传文件会先复制到运行时目录；日志带时间，响应带 `trace_id`；不要记录文件内容、账号或密钥。
+```
+strip → 删全部内部空白 → lower → 去标点但保留数字 → 整格匹配 15 项
+15 项：f, fail, failed, ng, nogo, reject, rejected, 不合格, 不通过, 不良,
+      超差, 超上限, 超下限, 拒收, x
+额外一条：以 f 开头且其后全是汉字（f略 / f超差）→ 不合格
+```
 
-## 常见问题
+三个容易搞错的点：
 
-- **公式结果不同**：确认 Windows Excel 可用，保持单 worker，并以 Excel COM 路径复测。
-- **输出被占用**：关闭 Excel 中打开的目标文件后重试。
-- **接口任务重启后消失**：当前任务状态为进程内实现；接入数据库/队列前不承诺跨进程持久化。
+- **禁止 `startswith("f")`**。会把 `FQC`（终检）、`FPI`（首件检验）、`F.1`（带编号项）误判成不合格。
+- `F.1` 规范化后是 `f1`，不是 `f`，所以不会撞上裸 `f`。
+- `F.` 规范化后是 `f`，判不合格。
 
-## 变更记录与旧新对应表
+## 图号核对口径
 
-见 [CHANGELOG](CHANGELOG.md)、[扩展兼容性](docs/扩展兼容性.md)。
+`_dwg_match(dwg, base)` 返回 ok / partial / bad：
 
-| 旧文件/函数 | 新位置/接口 |
-| --- | --- |
-| `audit_fail.py` / `audit_file` | 根目录原程序；`backend/app/services/screening_service.py` 从根目录加载 |
-| `audit_fail_gui.py` | 根目录原 GUI 入口 |
-| `api.py` | 根目录原 API 入口；新 REST API 为 `/api/v1/nonconforming/*` |
+| 级别 | 条件 | 处理 |
+|---|---|---|
+| ok | 表内图号整串是文件名的一部分 | 记「一致」 |
+| partial | 整串对不上，但有某个**字段**相同（长度 ≥ `DWG_MIN_FIELD = 6`） | **不加前缀**，黄色提醒「图号不完全一致」 |
+| bad | 一个字段都对不上，最长公共子串也 < 8 | 加「图号错误_」前缀 |
+
+阈值 6 来自实测（2026-10-24，19 份真实样本）：
+
+| 文件名 | 表内图号 | 最长公共片段 | 判定 |
+|---|---|---|---|
+| KGZC02002_G_300000623835 | JH-YCL-KGZC02002_G | `KGZC02002`(9) | partial |
+| 93014428_prt-（1）_Shutter Storage | 93014428_prt-（1） | 16 | ok |
+| 93022499-新PD_托指垫块下 | 93022499-新PD | 12 | ok |
+| 93022011_Lid到位压块 | 93022011 | 8 | ok |
+| 93020825_prt_bellow转接件 | 301012039261 | `30`(2) | bad |
+| 93010LKS-DM_LeftSupportArm | 300000574253 | `30`(2) | bad |
+
+真实能对上的最短是 8 个字符，对不上时最长的巧合只有 2 个字符，取 6 作分界留 2 格余量。
+
+## v19 新增模板兼容（JO-WL-PZ-010 中微A0）
+
+新增分支全部只在旧逻辑识别失败时启用，旧模板走原路径。
+
+| 差异 | 旧模板 | 中微A0 模板 | 处理 |
+|---|---|---|---|
+| 规格列表头 | 公称 / 上限 / 下限 | 基准值 / 最大值 / 最小值（写在 Item No 表头行） | max/min 双双未识别时回退到表头行定位 |
+| 读数列序号 | 在表头或子表头行 | 单独一行（r7 的 1..5） | 检测到连续 1..N 序号行时采信 `instr+1 .. result-1` 全部列 |
+| 图号 | 图号 / WG No | Part No / 料号 | 仅在找不到图号时回退 |
+| 尾部签名区 | 结果列之后无文字 | I/L 列落在测量列范围内 | 结果值之后 A 列全非编号时截断数据区，避免总数虚高、补错 P |
+
+- **材质**：表头区 `Material / 材质` 值格为空 → 补 `6061-T6`。已有材质不动。值格按合并区右边界定位（标签 E4:G4、值格 H4:I4）。
+- **总数 / 检查数**：仍按「有数据的读数列数」更正。该模板实际 1 列，原值 1，不改。
+- **填 `/`**：仍只补上下限列数据区空白格（该模板 22 行 × E/F = 44 格），页脚不补。
+- **判定**：不再信任检验员结果列——即便结果列未标 F，程序也会逐行独立扫描实测值 × 上下限，把超差行抓出来判 `数据不合格_`。
+
+专项测试 `python test_newtpl.py`（20 项），交付前与 `regression_test.py` 一起跑。
+
+## 已知限制
+
+- **所有可见工作表都参与判定**，隐藏 / 深度隐藏表跳过（用户看不到的不判）。
+- 单块读数 ≥ 240 列的大表（.xls 放不下、折成两块的那种）不再按 5 列一组拆分，整表审核、一块到底。
+- 图号错误只做文件名与内部图号的比对，不做 BOM 校验（那是「提取文件数据」的活）。
+
+## 上下两块合并（.xls 256 列上限）
+
+.xls 最多 256 列，件数超过约 250 时制表人只能把余下的件折到下面另起一块。
+`_merge_continuation_blocks()` 在审核前把两块并成一块：
+
+- 判定严：第二块首件号必须 = 第一块末号 +1，且 B 列项目名能顺序对上，否则不动。
+- 只搬数值；**样式、边框、列宽一律照抄第一块同一行/同一列**。源表第二块常常没画边框、
+  字号也不统一，直接搬过去就是客户看到的「线没加上、列宽不一致、看着不对齐」。
+- 结果列整体右移，第二块读数插在原结果列位置之前。
+- 合并后清掉「铺到第 16384 列」的空样式单元与超宽合并区，列宽定义拆成逐列。
+
+已经是「一块到底」的旧产物（单块 ≥ 251 列）走 `_repair_wide_inplace()`：只修后半段的
+边框与列宽，数据一格不动，在已加载的工作簿上原地改，普通文件零额外开销。
+
+## 启动与退出
+
+- **启动**：GUI 顶层不再 `import audit_fail`（它会连带导入 openpyxl，约 0.6s）。
+  窗口先出来，第一次真正处理时才在 worker 线程里导入 —— 冷启动 1.20s → 0.43s。
+
+- **退出必须先收掉 worker**：`closeEvent` 会先确认，然后 `worker.stop()` →
+  `pool.cancel()` → 杀掉全部 worker（含整棵进程树）+ `sweep_orphan_excel()`
+  收掉本批次新起的无窗口 Excel。否则 QThread 还在跑就退出，子进程与 Excel
+  全成孤儿 —— 这正是「跑到一半随手关窗口」攒僵尸 EXCEL 的原因。
+- **孤儿 Excel 判据**：Excel 由 DCOM 拉起，不在 worker 的进程树里，`taskkill /T`
+  收不到；`ready` 未到时父进程也不知道 PID。可靠判据只有「批次前不存在 **且**
+  没有可见窗口」的 EXCEL —— 用户自己开的实例有窗口，绝不会被误杀。
